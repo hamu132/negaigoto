@@ -1,10 +1,10 @@
 # 使う機能だけをカンマ区切りで指名手配する
-from manim import Scene, Square, LEFT, FadeIn, RIGHT, BLUE
+from manim import *
 
 class MoveSquare(Scene):
     def construct(self):
-        square = Square(color=BLUE, fill_opacity=0.5)
-        square.shift(LEFT * 3)
+        square = Square(color=BLUE, fill_opacity=1)
+        square.shift(LEFT)
 
         self.play(FadeIn(square))
         self.wait(0.5)
