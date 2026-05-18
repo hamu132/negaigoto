@@ -78,79 +78,92 @@ class ThreeDLayout(ThreeDScene):
             FadeOut(lyrics_text),
             run_time=fade_out_time
         )
+
+
+    def play_lyrics_move(self, text_string: str, font: str="IPAMincho", font_size: int=15, speed: float=1, pos_x: float=4, pos_y: float=0, pos_z: float=5):
+        lyrics_text = Text(text_string, font=font, font_size=font_size, fill_color=WHITE, fill_opacity=0.9)
+        lyrics_text.rotate(75 * DEGREES, axis=X_AXIS).rotate(-10 * DEGREES, axis=Z_AXIS)
+        lyrics_text.set_z_index(-2)
+        start_pos = np.array([pos_x, pos_y, pos_z])
+        end_pos = np.array([pos_x, pos_y, pos_z - 6.0]) # Z軸を -6 する
         
+        lyrics_text.move_to(start_pos)
+        lyrics_text.align_to(start_pos, RIGHT)
+        self.add(lyrics_text)
+
+        # 速度計算
+        direction = end_pos - start_pos
+        distance = np.linalg.norm(direction)
+        velocity = (direction / distance) * speed
+
+        def updater_move(m, dt):
+            m.shift(velocity * dt)
+            if m.get_center()[2] <= end_pos[2]: 
+                m.clear_updaters()
+                self.remove(m)
+
+        lyrics_text.add_updater(updater_move)
+
+    def set_square(self):
+        box = Rectangle(width=20.0, height=10)
+        box.set_fill(color="#000000", opacity=1)
+        box.move_to(np.array([0, -5.0, 0]))
+        box.set_z_index(-1)
+        self.add(box)
     def construct(self):
         #self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
         
         DEBUG_MODE = True
 
-        # 🌊 波＆きらめきパラメータをインスタンス変数にして共通化
-        self.WAVE_SPEED = 1.0
-        self.WAVE_FREQUENCY = 0.6
-        self.WAVE_MIN_BRIGHT = 0.3
-        self.SPARKLE_SPEED = 1.0
-        self.SPARKLE_INTENSITY = 0.1
+
 
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
         self.set_camera_orientation(phi=75 * DEGREES, theta=-100 * DEGREES)
-        if DEBUG_MODE:
-            self.debug()
 
-        # 1. 海の生成
-        sea_dots, self.sea_data_map = self.create_pixel_sea(
-            image_path="img/image.png",
-            sky_ratio=0.37,
-            dot_x=200,
-            dot_y=30,
-            wave_frequency=self.WAVE_FREQUENCY,
-            wave_min_bright=self.WAVE_MIN_BRIGHT,
-        )
-        sea_group = VGroup(*sea_dots)
+
+
 
         if DEBUG_MODE:
+            # 🌊 波＆きらめきパラメータをインスタンス変数にして共通化
+            self.WAVE_SPEED = 1.0
+            self.WAVE_FREQUENCY = 0.6
+            self.WAVE_MIN_BRIGHT = 0.3
+            self.SPARKLE_SPEED = 1.0
+            self.SPARKLE_INTENSITY = 0.1
+
+            # 1. 海の生成
+            sea_dots, self.sea_data_map = self.create_pixel_sea(
+                image_path="img/image.png",
+                sky_ratio=0.37,
+                dot_x=200,
+                dot_y=30,
+                wave_frequency=self.WAVE_FREQUENCY,
+                wave_min_bright=self.WAVE_MIN_BRIGHT,
+            )
+            sea_group = VGroup(*sea_dots)
+            
             self.add(sea_group)
             sea_group.add_updater(lambda g, dt: self.animate_sea_step(g, dt))
 
+        self.set_square()
         self.current_time = 0.0
 
         # ========================================================
         # 🎬 メインのタイムライン
         # ========================================================
         time = music.get_duration_by_beats(4)
-        
 
-        self.play_lyrics("藁だらけの",
-                         font="IPAMincho",
-                         keep_time=music.get_duration_by_beats(5),
-                         fade_out_time=0.8,
-                         font_size=15,
-                         pos_x=2,
-                         pos_y=-1,
-                         pos_z=0.1)
-
-
-        self.play_lyrics("海で一人、濡れ衣のまま",
-                         font="IPAMincho",
-                         keep_time=music.get_duration_by_beats(11),
-                         fade_out_time=0.8,
-                         font_size=20,
-                         pos_x=3,
-                         pos_y=-2,
-                         pos_z=0.1)
-
-        self.play_lyrics("溺れた君は語る",
-                         font="IPAMincho",
-                         keep_time=music.get_duration_by_beats(11),
-                         fade_out_time=0.8,
-                         font_size=25,
-                         pos_x=0,
-                         pos_y=-4,
-                         pos_z=0.1)
-        
+        self.play_lyrics_move(text_string="藁だらけの", speed=1)
+        self.wait(time)
+        self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=1)
+        self.wait(time)
+        self.play_lyrics_move(text_string="溺れた", speed=1)
+        self.wait(time)
+        self.play_lyrics_move(text_string="君は語る", speed=1)
         self.wait(time)
 
-        if not DEBUG_MODE:
+        if DEBUG_MODE:
             sea_group.clear_updaters()
 
     def animate_sea_step(self, group: VGroup, dt: float):

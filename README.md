@@ -25,9 +25,9 @@ self.play(*[FadeIn(c) for c in cubes])
 
 
 # 図形
-Cube
-Square
-Rectangle
+Cube//立方体
+Square//
+Rectangle//
 
 cyber_box = Rectangle(
     width=4.0, 
