@@ -1,8 +1,10 @@
 # 使う機能だけをカンマ区切りで指名手配する
 from manim import *
+from timeline import MusicTimeline
 
 class MoveSquare(Scene):
     def construct(self):
+        music = MusicTimeline(bpm=150, beats_per_bar=4)
         square = Square(color=BLUE, fill_opacity=1)
         square.shift(LEFT)
 
