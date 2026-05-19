@@ -105,19 +105,17 @@ class ThreeDLayout(ThreeDScene):
         lyrics_text.add_updater(updater_move)
 
     def set_square(self):
-        box = Rectangle(width=20.0, height=10)
+        box = Rectangle(width=30, height=10)
         box.set_fill(color="#000000", opacity=1)
+        box.set_stroke(width=0)
         box.move_to(np.array([0, -5.0, 0]))
         box.set_z_index(-1)
         self.add(box)
+
     def construct(self):
         #self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
-        
         DEBUG_MODE = True
-
-
-
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
         self.set_camera_orientation(phi=75 * DEGREES, theta=-100 * DEGREES)
 
@@ -137,7 +135,7 @@ class ThreeDLayout(ThreeDScene):
                 image_path="img/image.png",
                 sky_ratio=0.37,
                 dot_x=200,
-                dot_y=30,
+                dot_y=40,
                 wave_frequency=self.WAVE_FREQUENCY,
                 wave_min_bright=self.WAVE_MIN_BRIGHT,
             )
@@ -148,27 +146,75 @@ class ThreeDLayout(ThreeDScene):
 
         self.set_square()
         self.current_time = 0.0
+        self.active_ripples = []
 
         # ========================================================
         # 🎬 メインのタイムライン
         # ========================================================
-        time = music.get_duration_by_beats(4)
+        time = music.get_duration_by_beats(8)
 
-        self.play_lyrics_move(text_string="藁だらけの", speed=1)
+        self.play_lyrics_move(text_string="藁だらけの", speed=0.5)
         self.wait(time)
-        self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=1)
+        self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=0.5)
         self.wait(time)
-        self.play_lyrics_move(text_string="溺れた", speed=1)
+        self.play_lyrics_move(text_string="溺れた", speed=0.5)
         self.wait(time)
-        self.play_lyrics_move(text_string="君は語る", speed=1)
+        self.play_lyrics_move(text_string="君は語る", speed=0.5)
+        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
         self.wait(time)
+
+        self.play_lyrics_move(text_string="首より下の", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="命を死にゆく誰かに", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="今すぐ", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="託したくて", speed=0.5)
+        self.wait(time)
+        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
+
+
+        self.wait(5)
 
         if DEBUG_MODE:
             sea_group.clear_updaters()
 
+
+    def play_ripple(
+        self,
+        pos_x: float = 0.0,
+        pos_y: float = 0.0,
+        pos_z: float = 0.0, # 3D配置用ですが水面は基本 Z=0
+        max_radius: float = 2.5,
+        expand_speed: float = 4.0, # ドット幅に合わせて少し速めがおすすめ
+        color: str = "#FFFFFF"     # 今回はドットの輝度にブレンドするため白ベースを推奨
+    ):
+        """
+        水面にドットベースの波紋を展開するため、波紋のパラメータを登録する。
+        実際のアニメーション処理は海全体のアップデーター（animate_sea_step）側で行う。
+        """
+        ripple_info = {
+            "center": np.array([pos_x, pos_y, 0.0]), # 水面(Z=0)での中心座標
+            "current_radius": 0.01,
+            "max_radius": max_radius,
+            "expand_speed": expand_speed,
+            "color": color
+        }
+        self.active_ripples.append(ripple_info)
+
+
     def animate_sea_step(self, group: VGroup, dt: float):
-        """毎フレーム呼び出され、大きな波のうねりと個別のきらめきを計算・反映する"""
+        """毎フレーム呼び出され、大きな波、きらめき、そしてドット絵の波紋を統合して計算・反映する"""
         self.current_time += dt
+
+        # 1. アクティブな波紋の半径を更新し、寿命が尽きたものは削除する
+        alive_ripples = []
+        for r in self.active_ripples:
+            r["current_radius"] += r["expand_speed"] * dt
+            # 最大半径に達していないものだけを残す
+            if r["current_radius"] < r["max_radius"]:
+                alive_ripples.append(r)
+        self.active_ripples = alive_ripples
 
         # 大きな波の明度変動範囲を決める
         cycle_phase = np.sin(self.current_time * 0.5)
@@ -188,20 +234,50 @@ class ThreeDLayout(ThreeDScene):
                 rect.set_fill(color=rgb_to_hex(colorsys.hls_to_rgb(base_h, base_l, base_s)))
                 continue
 
-            # 🌊 大きな波のうねり（行単位）
+            # 🌊 ① 大きな波のうねり（行単位）
             sin_wave = np.sin(y_local * self.WAVE_FREQUENCY - self.current_time * self.WAVE_SPEED)
             wave_factor = interpolate(current_min_bright, current_max_bright, (sin_wave + 1.0) / 2.0)
 
-            # ✨ 個別のきらめき（完全に独立したパチパチ感）
+            # ✨ ② 個別のきらめき
             sparkle_sin = np.sin(self.current_time * self.SPARKLE_SPEED + sparkle_offset)
             sparkle_factor = 1.0 + (sparkle_sin * self.SPARKLE_INTENSITY)
 
             total_factor = wave_factor * sparkle_factor
 
-            # 新しい輝度を計算して適用
+            # ベースとなる海の明度を計算
             new_l = base_l * total_factor
             new_l = min(max(new_l, 0.0), 1.0)
+            
+            # 🔴 ③ ドット絵波紋のエフェクト重ね合わせ
+            # このドットの現在のワールド座標を取得
+            rect_pos = rect.get_center()
+            
+            ripple_bright_bonus = 0.0
+            
+            for r in self.active_ripples:
+                # 波紋の中心からこのドットまでの距離を計算 (XとYの平面距離)
+                dist = np.linalg.norm(rect_pos[:2] - r["center"][:2])
+                current_r = r["current_radius"]
+                
+                # 波紋の線の太さ（ドット絵なので少し肉厚にするのがコツ）
+                thickness = 0.2
+                
+                # ドットが波紋の輪っかのベロシティ（フチ）の中にいるか
+                if abs(dist - current_r) < thickness:
+                    # 中心に近いほど、また最大半径に近づくほどフェードアウトさせる
+                    progress = current_r / r["max_radius"]
+                    fade = 1.0 - progress
+                    
+                    # 輪っかの中心ほど光が強く、エッジに向かって滑らかになる係数
+                    edge_factor = 1.0 - (abs(dist - current_r) / thickness)
+                    
+                    # このドットに与える輝度ボーナス
+                    ripple_bright_bonus += edge_factor * fade * 0.5
 
+            # 波紋の光を上乗せ（1.0を超えないように丸める）
+            new_l = min(new_l + ripple_bright_bonus, 1.0)
+
+            # 最終的な色を決定して適用
             new_r, new_g, new_b = colorsys.hls_to_rgb(base_h, new_l, base_s)
             new_color = rgb_to_hex((new_r, new_g, new_b))
 
@@ -237,7 +313,7 @@ class ThreeDLayout(ThreeDScene):
             for x in range(dot_x):
                 r, g, b = img_data[y, x]
                 if r < 10 and g < 10 and b < 10:
-                    continue
+                    r, g, b = 2, 2, 5
                 
                 h, l, s = colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
                 new_l = l * wave_factor
