@@ -255,12 +255,21 @@ class ThreeDLayout(ThreeDScene):
             ripple_bright_bonus = 0.0
             
             for r in self.active_ripples:
+                dx = rect_pos[0] - r["center"][0]
+                dy = rect_pos[1] - r["center"][1]
+                
                 # 波紋の中心からこのドットまでの距離を計算 (XとYの平面距離)
-                dist = np.linalg.norm(rect_pos[:2] - r["center"][:2])
+                dist = np.sqrt(dx**2 + dy**2)
                 current_r = r["current_radius"]
+
+                y_percentage = (rect_pos[1] + 6.0) / 6.0
+                y_percentage = min(max(y_percentage, 0.0), 1.0) # 0.0〜1.0に安全ガード
+
+                depth_factor = interpolate(1.2, 0.3, y_percentage)
+                depth_factor = min(max(depth_factor, 0.3), 1.2)
                 
                 # 波紋の線の太さ（ドット絵なので少し肉厚にするのがコツ）
-                thickness = 0.2
+                thickness = 0.25 * depth_factor
                 
                 # ドットが波紋の輪っかのベロシティ（フチ）の中にいるか
                 if abs(dist - current_r) < thickness:
@@ -270,9 +279,9 @@ class ThreeDLayout(ThreeDScene):
                     
                     # 輪っかの中心ほど光が強く、エッジに向かって滑らかになる係数
                     edge_factor = 1.0 - (abs(dist - current_r) / thickness)
-                    
-                    # このドットに与える輝度ボーナス
-                    ripple_bright_bonus += edge_factor * fade * 0.5
+
+                    brightness_mod = edge_factor * fade * 0.5 * depth_factor
+                    ripple_bright_bonus += brightness_mod
 
             # 波紋の光を上乗せ（1.0を超えないように丸める）
             new_l = min(new_l + ripple_bright_bonus, 1.0)
