@@ -112,10 +112,145 @@ class ThreeDLayout(ThreeDScene):
         box.set_z_index(-1)
         self.add(box)
 
+    def set_moon(self):
+        # 🌙 月のパラメータ
+        moon_radius = 0.6
+        self.moon_pos = np.array([-2.0, 0, 3.0]) # 海のハイライトに合わせて調整してください
+
+        # ==========================================
+        # 1. 2色のノイズ混じりの月本体（ピクセルで生成）
+        # ==========================================
+        self.moon = VGroup()
+        color_light = "#D4F1F9" # 明るい青白
+        color_dark = "#93B5C6"  # 少し暗めの青灰（模様・クレーター用）
+        dot_size = 0.03         # ドットの細かさ（海と合わせると綺麗です）
+        
+        # 円を覆う四角形グリッドの範囲を計算
+        grid_steps = int((moon_radius * 2) / dot_size)
+        start_val = -moon_radius
+        
+        for i in range(grid_steps):
+            for j in range(grid_steps):
+                x = start_val + i * dot_size + dot_size / 2
+                y = start_val + j * dot_size + dot_size / 2
+                
+                # 中心からの距離が半径以内のときだけドットを配置（全体を円形にする）
+                if x**2 + y**2 <= moon_radius**2:
+                    # 💡 【ノイズの魔法】
+                    # 75%の確率で明るい色、25%の確率で暗い色を選択します。
+                    # この比率を変えることで、月の模様の濃さを調整できます。
+                    chosen_color = color_light if np.random.rand() > 0.25 else color_dark
+                    
+                    dot = Rectangle(
+                        width=dot_size, 
+                        height=dot_size, 
+                        fill_color=chosen_color, 
+                        fill_opacity=1.0, 
+                        stroke_width=0
+                    )
+                    # Z=0 の平面上にドットを配置
+                    dot.move_to(np.array([x, y, 0]))
+                    self.moon.add(dot)
+
+        # 全体を指定位置に移動し、カメラに合わせて立ち上げる
+        self.moon.move_to(self.moon_pos)
+        self.moon.rotate(75 * DEGREES, axis=RIGHT)
+
+        # ==========================================
+        # 2. リアルなグロー（光彩）エフェクトの生成
+        # ==========================================
+        self.glow_group = VGroup()
+        num_layers = 12
+        max_glow_spread = 2.0
+        
+        for i in range(num_layers):
+            current_radius = moon_radius + (max_glow_spread * (i / num_layers))
+            # 💡 指数関数（2乗）を使って、外側ほどスッと消えるリアルな光の減衰を表現
+            current_opacity = 0.15 * (1.0 - (i / num_layers))**2 
+            
+            glow_layer = Circle(
+                radius=current_radius,
+                stroke_width=0,
+                fill_color=color_light, # グローは明るい色ベース
+                fill_opacity=current_opacity
+            )
+            self.glow_group.add(glow_layer)
+
+        self.glow_group.move_to(self.moon_pos)
+        self.glow_group.rotate(75 * DEGREES, axis=RIGHT)
+
+        # シーンに追加（グローが奥、月本体が手前）
+        self.add(self.glow_group, self.moon)
+
+
+    def set_cloud(self):
+        # ==========================================
+        # 3. 動く雲と、月明かりの遮蔽（シャドウ）システム
+        # ==========================================
+        # 雲の仮グラフィック（暗い青灰色のピクセルの塊）
+        self.cloud = VGroup()
+        cloud_color = "#2A3B4C"
+        
+        # とりあえず横長のシンプルなブロック状の雲を作ります
+        # （後で好きな形に作り直せるように別関数化しても良いですね）
+        for cx in range(-3, 4):
+            for cy in range(-1, 2):
+                if np.random.rand() > 0.3:  # 少し穴あきのランダムな雲
+                    c_dot = Rectangle(width=0.2, height=0.2, fill_color=cloud_color, fill_opacity=0.8, stroke_width=0)
+                    c_dot.move_to(np.array([cx * 0.2, cy * 0.2, 0]))
+                    self.cloud.add(c_dot)
+        
+        # 雲の初期位置（画面の左外側、月の少し手前の高さ）
+        self.cloud.move_to(np.array([-8.0, -1, 3]))
+        self.cloud.rotate(75 * DEGREES, axis=RIGHT)
+        self.add(self.cloud)
+
+        # 🌟 海に渡すための「現在の月明かりの強さ (0.0〜1.0)」を保持する変数
+        self.current_moonlight = 1.0 
+
+        # 雲を動かしつつ、明るさを計算するアップデーター
+        def cloud_updater(m, dt):
+            # 雲を右へ移動させる（スピードはお好みで）
+            m.shift(RIGHT * 1.5 * dt)
+            
+            cloud_x = m.get_center()[0]
+            moon_x = self.moon_pos[0]
+            
+            # 月と雲のX座標の距離を測る
+            distance = abs(cloud_x - moon_x)
+            
+            # 💡 【遮蔽の計算】距離が 3.0 未満になったら暗くなり始める
+            fade_radius = 3.0
+            if distance < fade_radius:
+                # 重なっているほど 0.3（暗い）に近づき、離れると 1.0 になる
+                # smooth 関数を使って滑らかに暗く/明るくさせます
+                progress = distance / fade_radius
+                intensity = interpolate(0.3, 1.0, smooth(progress))
+            else:
+                intensity = 1.0
+                
+            self.current_moonlight = intensity
+            
+            # 1. 月本体の明るさ（透明度）を落とす
+            # ※完全に透明にせず、雲の奥でぼんやり光っている感じを残します
+            for dot in self.moon:
+                dot.set_opacity(intensity)
+                
+            # 2. グロー（光彩）の明るさを落とす
+            for i, layer in enumerate(self.glow_group):
+                # 元の計算式 × 現在の月明かり強度
+                orig_opacity = 0.15 * (1.0 - (i / 12))**2 
+                layer.set_opacity(orig_opacity * intensity)
+
+        # アップデーターを雲にセット
+        self.cloud.add_updater(cloud_updater)
+
+
+
     def construct(self):
-        #self.debug()
+        self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
-        DEBUG_MODE = True
+        DEBUG_MODE = False
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
         self.set_camera_orientation(phi=75 * DEGREES, theta=-100 * DEGREES)
 
@@ -148,30 +283,35 @@ class ThreeDLayout(ThreeDScene):
         self.current_time = 0.0
         self.active_ripples = []
 
+        self.set_moon()
+        self.set_cloud()
+
         # ========================================================
         # 🎬 メインのタイムライン
         # ========================================================
         time = music.get_duration_by_beats(8)
+        longTime = music.get_duration_by_beats(16)
 
         self.play_lyrics_move(text_string="藁だらけの", speed=0.5)
         self.wait(time)
-        self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=0.5)
         self.wait(time)
-        self.play_lyrics_move(text_string="溺れた", speed=0.5)
-        self.wait(time)
-        self.play_lyrics_move(text_string="君は語る", speed=0.5)
-        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
-        self.wait(time)
+        # self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=0.5)
+        # self.wait(time)
+        # self.play_lyrics_move(text_string="溺れた", speed=0.5)
+        # self.wait(time)
+        # self.play_lyrics_move(text_string="君は語る", speed=0.5)
+        # self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
+        # self.wait(time)
 
-        self.play_lyrics_move(text_string="首より下の", speed=0.5)
-        self.wait(time)
-        self.play_lyrics_move(text_string="命を死にゆく誰かに", speed=0.5)
-        self.wait(time)
-        self.play_lyrics_move(text_string="今すぐ", speed=0.5)
-        self.wait(time)
-        self.play_lyrics_move(text_string="託したくて", speed=0.5)
-        self.wait(time)
-        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
+        # self.play_lyrics_move(text_string="首より下の", speed=0.5)
+        # self.wait(time)
+        # self.play_lyrics_move(text_string="命を死にゆく誰かに", speed=0.5)
+        # self.wait(time)
+        # self.play_lyrics_move(text_string="今すぐ", speed=0.5)
+        # self.wait(time)
+        # self.play_lyrics_move(text_string="託したくて", speed=0.5)
+        # self.wait(time)
+        # self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
 
 
         self.wait(5)
@@ -326,6 +466,7 @@ class ThreeDLayout(ThreeDScene):
                 
                 h, l, s = colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
                 new_l = l * wave_factor
+                new_l = new_l * self.current_moonlight
                 new_l = min(max(new_l, 0.0), 1.0)
                 
                 new_r, new_g, new_b = colorsys.hls_to_rgb(h, new_l, s)
