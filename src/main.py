@@ -123,7 +123,7 @@ class ThreeDLayout(ThreeDScene):
         self.moon_pos = np.array([
             -2.0,
             0,
-            5
+            6
         ])
 
         # ==========================================
@@ -170,62 +170,138 @@ class ThreeDLayout(ThreeDScene):
 
         self.clouds = Group()
 
-        cloud_data = [
+        cloud_paths = [
 
-            {
-                "path": "img/cloud_01.png",
-                "pos": np.array([-10.0, 0.3, 2.2]),
-                "scale": 2.8,
-                "speed": 1.0
-            },
-
-            {
-                "path": "img/cloud_01.png",
-                "pos": np.array([-15.0, -0.2, 3.1]),
-                "scale": 2.2,
-                "speed": 0.7
-            },
-
-            {
-                "path": "img/cloud_01.png",
-                "pos": np.array([-21.0, 0.6, 2.3]),
-                "scale": 3.5,
-                "speed": 1.3
-            }
+            "img/cloud_01.png",
+            "img/cloud_02.png",
+            "img/cloud_03.png",
+            "img/cloud_04.png"
         ]
 
-        # ==========================================
-        # ☁ 雲生成
-        # ==========================================
+        cloud_count = 40
 
-        for data in cloud_data:
+        for _ in range(cloud_count):
 
-            cloud = ImageMobject(
-                data["path"]
+            path = np.random.choice(cloud_paths)
+
+            # ==========================================
+            # 奥行き
+            # ==========================================
+
+            z = np.random.uniform(
+                1.8,
+                4.5
             )
 
-            # ピクセル感維持
+            depth_t = inverse_interpolate(
+                1.8,
+                4.5,
+                z
+            )
+
+            # ==========================================
+            # 移動速度
+            # 近景ほど速い
+            # ==========================================
+
+            speed = interpolate(
+                2.4,
+                0.35,
+                depth_t
+            )
+
+            # ==========================================
+            # サイズ
+            # ==========================================
+
+            scale = interpolate(
+                5.5,
+                1.2,
+                depth_t
+            )
+
+            scale *= np.random.uniform(
+                0.7,
+                1.4
+            )
+
+            # ==========================================
+            # 配置
+            # ==========================================
+
+            x = np.random.uniform(
+                -55,
+                35
+            )
+
+            y = np.random.uniform(
+                -1.5,
+                1.6
+            )
+
+            cloud = ImageMobject(path)
+
             cloud.set_resampling_algorithm(
                 RESAMPLING_ALGORITHMS["nearest"]
             )
 
-            # サイズ
-            cloud.scale(data["scale"])
+            cloud.scale(scale)
 
-            # 配置
-            cloud.move_to(data["pos"])
+            cloud.move_to(
+                np.array([x, y, z])
+            )
 
-            # 月面と合わせる
             cloud.rotate(
                 75 * DEGREES,
                 axis=RIGHT
             )
 
-            # 透明感
-            cloud.set_opacity(0.55)
+            # ==========================================
+            # 不透明度
+            # ==========================================
 
+            opacity = interpolate(
+                0.82,
+                0.05,
+                depth_t
+            )
+
+            opacity *= np.random.uniform(
+                0.7,
+                1.0
+            )
+
+            cloud.set_opacity(opacity)
+
+            # ==========================================
+            # 色
+            # ==========================================
+
+            darkness = interpolate(
+                0.04,
+                0.18,
+                depth_t
+            )
+
+            blue_shift = np.random.uniform(
+                0.9,
+                1.05
+            )
+
+            cloud.set_color(
+                rgb_to_color((
+                    darkness * 0.7,
+                    darkness * 0.8,
+                    darkness * blue_shift
+                ))
+            )
+
+            # ==========================================
             # カスタム属性
-            cloud.speed = data["speed"]
+            # ==========================================
+
+            cloud.speed = speed
+            cloud.depth_t = depth_t
 
             self.clouds.add(cloud)
 
@@ -299,7 +375,7 @@ class ThreeDLayout(ThreeDScene):
 
 
     def construct(self):
-        self.debug()
+        #self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
         DEBUG_MODE = False
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
@@ -313,7 +389,7 @@ class ThreeDLayout(ThreeDScene):
         self.set_moon()
         self.set_cloud()
 
-        if DEBUG_MODE:
+        if not DEBUG_MODE:
             # 🌊 波＆きらめきパラメータをインスタンス変数にして共通化
             self.WAVE_SPEED = 1.0
             self.WAVE_FREQUENCY = 0.6
@@ -346,28 +422,43 @@ class ThreeDLayout(ThreeDScene):
         self.play_lyrics_move(text_string="藁だらけの", speed=0.5)
         self.wait(time)
         self.wait(time)
-        # self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=0.5)
-        # self.wait(time)
-        # self.play_lyrics_move(text_string="溺れた", speed=0.5)
-        # self.wait(time)
-        # self.play_lyrics_move(text_string="君は語る", speed=0.5)
-        # self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
-        # self.wait(time)
+        self.play_lyrics_move(text_string="海で一人濡れ衣のまま", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="溺れた", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="君は語る", speed=0.5)
+        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
+        self.wait(time)
 
-        # self.play_lyrics_move(text_string="首より下の", speed=0.5)
-        # self.wait(time)
-        # self.play_lyrics_move(text_string="命を死にゆく誰かに", speed=0.5)
-        # self.wait(time)
-        # self.play_lyrics_move(text_string="今すぐ", speed=0.5)
-        # self.wait(time)
-        # self.play_lyrics_move(text_string="託したくて", speed=0.5)
-        # self.wait(time)
-        # self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
+        self.play_lyrics_move(text_string="首より下の", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="命を死にゆく誰かに", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="今すぐ", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="託したくて", speed=0.5)
+        self.wait(time)
+        self.play_ripple(pos_x=1, pos_y=-4, pos_z=0, max_radius=3.0, expand_speed=0.5)
 
 
-        self.wait(5)
+        #この後、カメラ位置z座標を+10ぐらいイージングで上げる
+        self.move_camera(
+            phi=40 * DEGREES,
+            theta=-100 * DEGREES,
+            run_time=6,
+            rate_func=smooth
+        )
 
-        if DEBUG_MODE:
+        self.play_lyrics_move(text_string="待ち続けても何も変わらない", speed=0.5)
+        self.wait(time)
+        self.play_lyrics_move(text_string="それでも悲劇に期待してる", speed=0.5)
+        self.wait(time)
+        self.wait(time)
+        self.wait(time)
+        self.wait(time)
+
+
+        if not DEBUG_MODE:
             sea_group.clear_updaters()
 
 
