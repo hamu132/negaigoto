@@ -113,75 +113,54 @@ class ThreeDLayout(ThreeDScene):
         self.add(box)
 
     def set_moon(self):
-        # 🌙 月のパラメータ
-        moon_radius = 0.6
-        self.moon_pos = np.array([-2.0, 0, 3.0]) # 海のハイライトに合わせて調整してください
 
         # ==========================================
-        # 1. 2色のノイズ混じりの月本体（ピクセルで生成）
+        # 🌙 基本設定
         # ==========================================
-        self.moon = VGroup()
-        color_light = "#D4F1F9" # 明るい青白
-        color_dark = "#93B5C6"  # 少し暗めの青灰（模様・クレーター用）
-        dot_size = 0.03         # ドットの細かさ（海と合わせると綺麗です）
-        
-        # 円を覆う四角形グリッドの範囲を計算
-        grid_steps = int((moon_radius * 2) / dot_size)
-        start_val = -moon_radius
-        
-        for i in range(grid_steps):
-            for j in range(grid_steps):
-                x = start_val + i * dot_size + dot_size / 2
-                y = start_val + j * dot_size + dot_size / 2
-                
-                # 中心からの距離が半径以内のときだけドットを配置（全体を円形にする）
-                if x**2 + y**2 <= moon_radius**2:
-                    # 💡 【ノイズの魔法】
-                    # 75%の確率で明るい色、25%の確率で暗い色を選択します。
-                    # この比率を変えることで、月の模様の濃さを調整できます。
-                    chosen_color = color_light if np.random.rand() > 0.25 else color_dark
-                    
-                    dot = Rectangle(
-                        width=dot_size, 
-                        height=dot_size, 
-                        fill_color=chosen_color, 
-                        fill_opacity=1.0, 
-                        stroke_width=0
-                    )
-                    # Z=0 の平面上にドットを配置
-                    dot.move_to(np.array([x, y, 0]))
-                    self.moon.add(dot)
 
-        # 全体を指定位置に移動し、カメラに合わせて立ち上げる
-        self.moon.move_to(self.moon_pos)
-        self.moon.rotate(75 * DEGREES, axis=RIGHT)
+        moon_radius = 2.0
+
+        self.moon_pos = np.array([
+            -2.0,
+            0,
+            5
+        ])
 
         # ==========================================
-        # 2. リアルなグロー（光彩）エフェクトの生成
+        # 🌙 月 + グロー画像
         # ==========================================
-        self.glow_group = VGroup()
-        num_layers = 12
-        max_glow_spread = 2.0
-        
-        for i in range(num_layers):
-            current_radius = moon_radius + (max_glow_spread * (i / num_layers))
-            # 💡 指数関数（2乗）を使って、外側ほどスッと消えるリアルな光の減衰を表現
-            current_opacity = 0.15 * (1.0 - (i / num_layers))**2 
-            
-            glow_layer = Circle(
-                radius=current_radius,
-                stroke_width=0,
-                fill_color=color_light, # グローは明るい色ベース
-                fill_opacity=current_opacity
-            )
-            self.glow_group.add(glow_layer)
 
-        self.glow_group.move_to(self.moon_pos)
-        self.glow_group.rotate(75 * DEGREES, axis=RIGHT)
+        self.moon = ImageMobject(
+            "img/moon_with_glow.png"
+        )
 
-        # シーンに追加（グローが奥、月本体が手前）
-        self.add(self.glow_group, self.moon)
+        # ピクセル感維持
+        self.moon.set_resampling_algorithm(
+            RESAMPLING_ALGORITHMS["nearest"]
+        )
 
+        # サイズ調整
+        # glow込み画像なので少し大きめに
+        self.moon.scale_to_fit_width(
+            moon_radius * 6
+        )
+
+        # 位置
+        self.moon.move_to(
+            self.moon_pos
+        )
+
+        # カメラ角度
+        self.moon.rotate(
+            75 * DEGREES,
+            axis=RIGHT
+        )
+
+        # ==========================================
+        # 🌙 シーン追加
+        # ==========================================
+
+        self.add(self.moon)
 
     def set_cloud(self):
         # ==========================================
@@ -236,11 +215,11 @@ class ThreeDLayout(ThreeDScene):
             for dot in self.moon:
                 dot.set_opacity(intensity)
                 
-            # 2. グロー（光彩）の明るさを落とす
-            for i, layer in enumerate(self.glow_group):
-                # 元の計算式 × 現在の月明かり強度
-                orig_opacity = 0.15 * (1.0 - (i / 12))**2 
-                layer.set_opacity(orig_opacity * intensity)
+            # # 2. グロー（光彩）の明るさを落とす
+            # for i, layer in enumerate(self.glow_group):
+            #     # 元の計算式 × 現在の月明かり強度
+            #     orig_opacity = 0.15 * (1.0 - (i / 12))**2 
+            #     layer.set_opacity(orig_opacity * intensity)
 
         # アップデーターを雲にセット
         self.cloud.add_updater(cloud_updater)
@@ -248,14 +227,19 @@ class ThreeDLayout(ThreeDScene):
 
 
     def construct(self):
-        self.debug()
+        #self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
-        DEBUG_MODE = False
+        DEBUG_MODE = True
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
         self.set_camera_orientation(phi=75 * DEGREES, theta=-100 * DEGREES)
 
 
+        self.set_square()
+        self.current_time = 0.0
+        self.active_ripples = []
 
+        self.set_moon()
+        self.set_cloud()
 
         if DEBUG_MODE:
             # 🌊 波＆きらめきパラメータをインスタンス変数にして共通化
@@ -279,12 +263,7 @@ class ThreeDLayout(ThreeDScene):
             self.add(sea_group)
             sea_group.add_updater(lambda g, dt: self.animate_sea_step(g, dt))
 
-        self.set_square()
-        self.current_time = 0.0
-        self.active_ripples = []
 
-        self.set_moon()
-        self.set_cloud()
 
         # ========================================================
         # 🎬 メインのタイムライン
@@ -386,6 +365,7 @@ class ThreeDLayout(ThreeDScene):
 
             # ベースとなる海の明度を計算
             new_l = base_l * total_factor
+            new_l *= self.current_moonlight
             new_l = min(max(new_l, 0.0), 1.0)
             
             # 🔴 ③ ドット絵波紋のエフェクト重ね合わせ
