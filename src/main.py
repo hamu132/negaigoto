@@ -163,73 +163,145 @@ class ThreeDLayout(ThreeDScene):
         self.add(self.moon)
 
     def set_cloud(self):
-        # ==========================================
-        # 3. 動く雲と、月明かりの遮蔽（シャドウ）システム
-        # ==========================================
-        # 雲の仮グラフィック（暗い青灰色のピクセルの塊）
-        self.cloud = VGroup()
-        cloud_color = "#2A3B4C"
-        
-        # とりあえず横長のシンプルなブロック状の雲を作ります
-        # （後で好きな形に作り直せるように別関数化しても良いですね）
-        for cx in range(-3, 4):
-            for cy in range(-1, 2):
-                if np.random.rand() > 0.3:  # 少し穴あきのランダムな雲
-                    c_dot = Rectangle(width=0.2, height=0.2, fill_color=cloud_color, fill_opacity=0.8, stroke_width=0)
-                    c_dot.move_to(np.array([cx * 0.2, cy * 0.2, 0]))
-                    self.cloud.add(c_dot)
-        
-        # 雲の初期位置（画面の左外側、月の少し手前の高さ）
-        self.cloud.move_to(np.array([-8.0, -1, 3]))
-        self.cloud.rotate(75 * DEGREES, axis=RIGHT)
-        self.add(self.cloud)
 
-        # 🌟 海に渡すための「現在の月明かりの強さ (0.0〜1.0)」を保持する変数
-        self.current_moonlight = 1.0 
+        # ==========================================
+        # ☁ 雲レイヤー
+        # ==========================================
 
-        # 雲を動かしつつ、明るさを計算するアップデーター
+        self.clouds = Group()
+
+        cloud_data = [
+
+            {
+                "path": "img/cloud_01.png",
+                "pos": np.array([-10.0, 0.3, 2.2]),
+                "scale": 2.8,
+                "speed": 1.0
+            },
+
+            {
+                "path": "img/cloud_01.png",
+                "pos": np.array([-15.0, -0.2, 3.1]),
+                "scale": 2.2,
+                "speed": 0.7
+            },
+
+            {
+                "path": "img/cloud_01.png",
+                "pos": np.array([-21.0, 0.6, 2.3]),
+                "scale": 3.5,
+                "speed": 1.3
+            }
+        ]
+
+        # ==========================================
+        # ☁ 雲生成
+        # ==========================================
+
+        for data in cloud_data:
+
+            cloud = ImageMobject(
+                data["path"]
+            )
+
+            # ピクセル感維持
+            cloud.set_resampling_algorithm(
+                RESAMPLING_ALGORITHMS["nearest"]
+            )
+
+            # サイズ
+            cloud.scale(data["scale"])
+
+            # 配置
+            cloud.move_to(data["pos"])
+
+            # 月面と合わせる
+            cloud.rotate(
+                75 * DEGREES,
+                axis=RIGHT
+            )
+
+            # 透明感
+            cloud.set_opacity(0.55)
+
+            # カスタム属性
+            cloud.speed = data["speed"]
+
+            self.clouds.add(cloud)
+
+        self.add(self.clouds)
+
+        # ==========================================
+        # 🌙 海用の月光係数
+        # ==========================================
+
+        self.current_moonlight = 1.0
+
+        # ==========================================
+        # ☁ 雲アニメーション
+        # ==========================================
+
         def cloud_updater(m, dt):
-            # 雲を右へ移動させる（スピードはお好みで）
-            m.shift(RIGHT * 1.5 * dt)
-            
-            cloud_x = m.get_center()[0]
-            moon_x = self.moon_pos[0]
-            
-            # 月と雲のX座標の距離を測る
-            distance = abs(cloud_x - moon_x)
-            
-            # 💡 【遮蔽の計算】距離が 3.0 未満になったら暗くなり始める
-            fade_radius = 3.0
-            if distance < fade_radius:
-                # 重なっているほど 0.3（暗い）に近づき、離れると 1.0 になる
-                # smooth 関数を使って滑らかに暗く/明るくさせます
-                progress = distance / fade_radius
-                intensity = interpolate(0.3, 1.0, smooth(progress))
-            else:
-                intensity = 1.0
-                
-            self.current_moonlight = intensity
-            
-            # 1. 月本体の明るさ（透明度）を落とす
-            # ※完全に透明にせず、雲の奥でぼんやり光っている感じを残します
-            for dot in self.moon:
-                dot.set_opacity(intensity)
-                
-            # # 2. グロー（光彩）の明るさを落とす
-            # for i, layer in enumerate(self.glow_group):
-            #     # 元の計算式 × 現在の月明かり強度
-            #     orig_opacity = 0.15 * (1.0 - (i / 12))**2 
-            #     layer.set_opacity(orig_opacity * intensity)
 
-        # アップデーターを雲にセット
-        self.cloud.add_updater(cloud_updater)
+            moon_x = self.moon_pos[0]
+
+            nearest_dist = 9999.0
+
+            for cloud in self.clouds:
+
+                # 横移動
+                cloud.shift(
+                    RIGHT * cloud.speed * dt
+                )
+
+                # 画面外ループ
+                if cloud.get_center()[0] > 12:
+
+                    cloud.shift(
+                        LEFT * 26
+                    )
+
+                # 月との距離
+                dist = abs(
+                    cloud.get_center()[0]
+                    - moon_x
+                )
+
+                nearest_dist = min(
+                    nearest_dist,
+                    dist
+                )
+
+            # ==================================
+            # 🌙 海面反射用の減衰
+            # ==================================
+
+            fade_radius = 4.0
+
+            if nearest_dist < fade_radius:
+
+                progress = nearest_dist / fade_radius
+
+                self.current_moonlight = interpolate(
+                    0.35,
+                    1.0,
+                    smooth(progress)
+                )
+
+            else:
+
+                self.current_moonlight = 1.0
+
+        self.clouds.add_updater(
+            cloud_updater
+        )
 
 
 
     def construct(self):
-        #self.debug()
+        self.debug()
         music = MusicTimeline(bpm=150, beats_per_bar=4, offset=1.5)
-        DEBUG_MODE = True
+        DEBUG_MODE = False
         # phi: 上下の傾き（俯角）, theta: 左右の回転角
         self.set_camera_orientation(phi=75 * DEGREES, theta=-100 * DEGREES)
 
